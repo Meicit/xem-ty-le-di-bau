@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ thống Nhập liệu Tiến độ Cử tri</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        :root { --vn-red: #da251d; --dark-blue: #1e3c72; }
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
+        
+        /* Header màu vàng */
+        .header-panel { 
+            background: linear-gradient(135deg, #da251d 0%, #a01a14 100%); 
+            color: #ffeb3b; 
+            padding: 1.5rem 0; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
+            margin-bottom: 2rem; 
+        }
+        .header-panel p { color: #ffeb3b !important; }
+
+        .card { border: none; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 25px; }
+        .full-width-card-header { background-color: #ffffff; border-left: 6px solid #da251d; cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 18px 25px; font-weight: bold; color: #1e3c72; font-size: 1.1rem; }
+        .full-width-card-header:hover { background-color: #fff8f8; }
+        .full-width-card-header::after { content: '▼'; font-size: 0.9rem; transition: transform 0.3s; }
+        .full-width-card-header.collapsed::after { transform: rotate(-90deg); }
+
+        /* Bảng nhập liệu */
+        .input-table thead th { background-color: #212529 !important; color: #ffeb3b !important; font-weight: bold; text-transform: uppercase; font-size: 0.8rem; }
+        .input-voter { width: 65px; text-align: center; border: 1px solid #ddd; border-radius: 4px; padding: 2px; font-size: 0.9rem; }
+        .input-total-edit { width: 80px; text-align: center; border: 1px dashed #da251d; background: #fffbe6; font-weight: bold; }
+        
+        /* Thẻ thống kê */
+        .stat-card { border-top: 5px solid; }
+        .log-section { background: #212529; color: #00ff41; font-family: 'Consolas', monospace; padding: 15px; border-radius: 8px; max-height: 200px; overflow-y: auto; font-size: 0.8rem; }
+        
+        #loadingOverlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.6); z-index:9999; display:none; align-items:center; justify-content:center; color: white; flex-direction: column; }
+    </style>
+</head>
+<body>
+
+<div id="loadingOverlay">
+    <div class="spinner-border text-light mb-2"></div>
+    <div class="fw-bold">ĐANG XỬ LÝ DỮ LIỆU...</div>
+</div>
+
+<div class="header-panel text-center">
+    <h1 class="fw-bold">HỆ THỐNG NHẬP LIỆU <br> TIẾN ĐỘ CỬ TRI ĐI BẦU</h1>
+    <p class="lead text-uppercase mb-0">Theo dõi trực tuyến & Đồng bộ Google Sheets</p>
+</div>
+
+<div class="container-fluid px-4">
+    <div class="row g-3 mb-4 mt-n4">
+        <div class="col-md-3">
+            <div class="card stat-card shadow-sm p-3" style="border-color: #1e3c72;">
+                <div class="text-muted small text-uppercase fw-bold">Tổng số cử tri toàn xã</div>
+                <div class="h3 fw-bold mt-1" id="stat-tong" style="color: #1e3c72;">0</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card shadow-sm p-3" style="border-color: #28a745;">
+                <div class="text-muted small text-uppercase fw-bold">Số cử tri đã đi bầu</div>
+                <div class="h3 fw-bold mt-1" id="stat-dabau" style="color: #28a745;">0</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card shadow-sm p-3" style="border-color: #da251d;">
+                <div class="text-muted small text-uppercase fw-bold">Số cử tri chưa đi bầu</div>
+                <div class="h3 fw-bold mt-1" id="stat-chuabau" style="color: #da251d;">0</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card shadow-sm p-3" style="border-color: #ffc107;">
+                <div class="text-muted small text-uppercase fw-bold">Tỷ lệ đi bầu toàn xã</div>
+                <div class="h3 fw-bold mt-1" id="stat-tyle" style="color: #ffc107;">0%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card p-3 h-100 shadow-sm text-center">
+                <canvas id="timeLineChart" height="250"></canvas>
+                <div class="mt-2 fw-bold text-uppercase" style="color: #da251d; font-size: 0.85rem;">Tỷ lệ cử tri đi bầu trên toàn xã</div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card p-3 h-100 shadow-sm text-center">
+                <canvas id="unitBarChart" height="250"></canvas>
+                <div class="mt-2 fw-bold text-uppercase" style="color: #1e3c72; font-size: 0.85rem;">Tỷ lệ theo đơn vị bầu cử</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card w-100">
+        <div class="full-width-card-header" data-bs-toggle="collapse" data-bs-target="#collapseKhuVuc">
+            <span>CHI TIẾT NHẬP LIỆU LŨY TIẾN (34 KHU VỰC)</span>
+        </div>
+        <div id="collapseKhuVuc" class="collapse show">
+            <div class="card-body">
+                <div class="d-flex justify-content-end mb-3 gap-2">
+                    <button class="btn btn-danger btn-sm px-3 fw-bold" onclick="syncWithGoogle()">☁ ĐỒNG BỘ LÊN CLOUD</button>
+                    <button class="btn btn-outline-success btn-sm" onclick="exportData()">Xuất CSV</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered align-middle text-center input-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2">STT</th><th rowspan="2">ĐV</th><th rowspan="2" style="min-width: 160px;">Khu vực</th><th rowspan="2">Tổng số</th>
+                                <th colspan="5">Số bầu lũy tiến</th><th rowspan="2" class="bg-light text-dark">Chưa bầu</th><th rowspan="2">Tỷ lệ %</th>
+                            </tr>
+                            <tr><th>9:00</th><th>11:30</th><th>15:00</th><th>19:00</th><th>22:00</th></tr>
+                        </thead>
+                        <tbody id="voterDataBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card w-100 mb-5">
+        <div class="card-header bg-dark text-white fw-bold small">NHẬT KÝ CHỈNH SỬA HỆ THỐNG</div>
+        <div class="card-body"><div class="log-section" id="logContainer"></div></div>
+    </div>
+</div>
+
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyUNbD2WnioJyjeneVWEtzPwhrdUo4koFNa3Jf2PrnV7G_tZHKYvZMzUngREyrrEG_opQ/exec"; 
+
+// Thuật toán lũy tiến
+function getCurrent(row) {
+    return parseInt(row.h22) || parseInt(row.h19) || parseInt(row.h15) || parseInt(row.h11) || parseInt(row.h9) || 0;
+}
+
+function getUnitByKV(stt) {
+    stt = parseInt(stt);
+    if (stt <= 3) return "1"; if (stt <= 5) return "2"; if (stt <= 7) return "3"; if (stt <= 10) return "4";
+    if (stt <= 14) return "5"; if (stt <= 18) return "6"; if (stt <= 21) return "7"; if (stt <= 24) return "8";
+    if (stt <= 29) return "9"; if (stt <= 34) return "10";
+    return "Khác";
+}
+
+let voterData = [];
+let timeLineChart, unitBarChart;
+let editLogs = JSON.parse(localStorage.getItem('voterLogs_input_v1')) || [];
+
+async function loadData() {
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    try {
+        const response = await fetch(SCRIPT_URL);
+        const dataFromSheet = await response.json();
+        voterData = dataFromSheet.map(item => ({ 
+            ...item, don_vi: getUnitByKV(item.stt),
+            h9: item.h9 || 0, h11: item.h11 || 0, h15: item.h15 || 0, h19: item.h19 || 0, h22: item.h22 || 0
+        }));
+        init();
+        addLog("Đã tải dữ liệu từ Google Sheets", "text-success");
+    } catch (e) { alert("Lỗi kết nối Cloud!"); }
+    document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+async function syncWithGoogle() {
+    if (!confirm("Xác nhận đẩy toàn bộ số liệu lên Cloud?")) return;
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    try {
+        const formData = new URLSearchParams();
+        formData.append('data', JSON.stringify(voterData));
+        await fetch(SCRIPT_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: formData });
+        addLog("ĐÃ ĐỒNG BỘ LÊN CLOUD THÀNH CÔNG", "text-warning fw-bold");
+        alert("Đã lưu dữ liệu thành công!");
+    } catch (e) { alert("Lỗi đồng bộ!"); }
+    document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+function init() { renderTable(); updateGlobalStats(); updateCharts(); renderLogs(); }
+
+function renderTable() {
+    const tbody = document.getElementById('voterDataBody');
+    tbody.innerHTML = '';
+    voterData.forEach((row, index) => {
+        const current = getCurrent(row);
+        const p = row.tong > 0 ? ((current / row.tong) * 100).toFixed(2) : 0;
+        tbody.innerHTML += `
+            <tr>
+                <td>${row.stt}</td>
+                <td class="fw-bold text-primary">ĐV ${row.don_vi}</td>
+                <td class="text-start">${row.khu_vuc}</td>
+                <td><div class="d-flex align-items-center justify-content-center gap-1"><input type="number" id="tong-${index}" class="input-total-edit" value="${row.tong}" disabled onchange="saveTotal(${index}, this.value)"><button class="btn btn-outline-danger btn-sm p-0 px-1" onclick="enableEdit(${index})">Sửa</button></div></td>
+                <td><input type="number" class="input-voter" value="${row.h9}" onfocus="this.oldV=this.value" onchange="updateVal(${index},'h9',this.value,'9h',this.oldV)"></td>
+                <td><input type="number" class="input-voter" value="${row.h11}" onfocus="this.oldV=this.value" onchange="updateVal(${index},'h11',this.value,'11h30',this.oldV)"></td>
+                <td><input type="number" class="input-voter" value="${row.h15}" onfocus="this.oldV=this.value" onchange="updateVal(${index},'h15',this.value,'15h',this.oldV)"></td>
+                <td><input type="number" class="input-voter" value="${row.h19}" onfocus="this.oldV=this.value" onchange="updateVal(${index},'h19',this.value,'19h',this.oldV)"></td>
+                <td><input type="number" class="input-voter" value="${row.h22}" onfocus="this.oldV=this.value" onchange="updateVal(${index},'h22',this.value,'22h',this.oldV)"></td>
+                <td class="bg-light">${(row.tong - current).toLocaleString()}</td>
+                <td class="fw-bold text-danger">${p}%</td>
+            </tr>`;
+    });
+}
+
+function updateGlobalStats() {
+    let t = 0, v = 0;
+    voterData.forEach(i => { t += parseInt(i.tong || 0); v += getCurrent(i); });
+    document.getElementById('stat-tong').innerText = t.toLocaleString();
+    document.getElementById('stat-dabau').innerText = v.toLocaleString();
+    document.getElementById('stat-chuabau').innerText = (t - v).toLocaleString();
+    document.getElementById('stat-tyle').innerText = (t > 0 ? ((v / t) * 100).toFixed(2) : 0) + "%";
+}
+
+function updateCharts() {
+    const totalVoters = voterData.reduce((a, b) => a + parseInt(b.tong || 0), 0);
+    const timeKeys = ['h9', 'h11', 'h15', 'h19', 'h22'];
+    const timeLabels = ['9h', '11h30', '15h', '19h', '22h'];
+    const timeData = timeKeys.map(h => {
+        const val = voterData.reduce((a, b) => a + parseInt(b[h] || 0), 0);
+        return totalVoters > 0 ? ((val / totalVoters) * 100).toFixed(2) : 0;
+    });
+
+    if (timeLineChart) timeLineChart.destroy();
+    timeLineChart = new Chart(document.getElementById('timeLineChart'), {
+        type: 'line', plugins: [ChartDataLabels],
+        data: { labels: timeLabels, datasets: [{ label: 'Tiến độ (%)', data: timeData, borderColor: '#da251d', fill: true, backgroundColor: 'rgba(218, 37, 29, 0.1)', tension: 0.3, pointRadius: 6 }] },
+        options: { scales: { y: { min: 0, max: 125 } }, plugins: { datalabels: { anchor: 'end', align: 'top', formatter: v => v + '%', color: '#da251d', font: { weight: 'bold', size: 10 } } } }
+    });
+
+    const summary = {};
+    voterData.forEach(i => {
+        const dv = i.don_vi; if (!summary[dv]) summary[dv] = { t: 0, c: 0 };
+        summary[dv].t += parseInt(i.tong || 0); summary[dv].c += getCurrent(i);
+    });
+
+    if (unitBarChart) unitBarChart.destroy();
+    unitBarChart = new Chart(document.getElementById('unitBarChart'), {
+        type: 'bar', plugins: [ChartDataLabels],
+        data: {
+            labels: Object.keys(summary).sort((a,b)=>a-b).map(u => 'ĐV ' + u),
+            datasets: [{ label: 'Tỷ lệ %', data: Object.keys(summary).sort((a,b)=>a-b).map(u => summary[u].t > 0 ? ((summary[u].c/summary[u].t)*100).toFixed(2) : 0), backgroundColor: '#1e3c72', borderRadius: 5 }]
+        },
+        options: { 
+            scales: { y: { max: 125 } }, 
+            plugins: { 
+                datalabels: { anchor: 'end', align: 'top', formatter: v => v + '%', color: '#da251d', font: function(c) { return { weight: 'bold', size: c.chart.width < 400 ? 8 : 11 }; } },
+                legend: { display: false } 
+            } 
+        }
+    });
+}
+
+function updateVal(index, field, newVal, label, oldVal) {
+    newVal = parseInt(newVal) || 0; oldVal = parseInt(oldVal) || 0;
+    if (newVal !== oldVal) {
+        voterData[index][field] = newVal;
+        addLog(`Sửa ${label} - ${voterData[index].khu_vuc}: ${oldVal} → ${newVal}`, 'text-info');
+        init();
+    }
+}
+
+function saveTotal(index, newVal) {
+    const oldVal = voterData[index].tong; newVal = parseInt(newVal) || 0;
+    if (oldVal !== newVal) {
+        voterData[index].tong = newVal;
+        addLog(`Sửa TỔNG - ${voterData[index].khu_vuc}: ${oldVal} → ${newVal}`, 'text-warning');
+        init();
+    }
+    document.getElementById(`tong-${index}`).disabled = true;
+}
+
+function enableEdit(index) { const el = document.getElementById(`tong-${index}`); el.disabled = false; el.focus(); el.select(); }
+function addLog(msg, cl) {
+    const time = new Date().toLocaleTimeString('vi-VN');
+    editLogs.unshift({ time, msg, cl });
+    if (editLogs.length > 50) editLogs.pop();
+    localStorage.setItem('voterLogs_input_v1', JSON.stringify(editLogs));
+    renderLogs();
+}
+function renderLogs() { document.getElementById('logContainer').innerHTML = editLogs.map(l => `<div class="log-item small"><span class="text-muted">[${l.time}]</span> <span class="${l.cl}">${l.msg}</span></div>`).join(''); }
+function exportData() {
+    let csv = "\ufeffSTT,Don Vi,Khu Vuc,Tong,h9,h11,h15,h19,h22\n";
+    voterData.forEach(r => { csv += `${r.stt},${r.don_vi},${r.khu_vuc},${r.tong},${r.h9},${r.h11},${r.h15},${r.h19},${r.h22}\n`; });
+    const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })); link.download = "nhap_lieu_bau_cu.csv"; link.click();
+}
+window.onload = loadData;
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
